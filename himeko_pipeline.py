@@ -13,7 +13,7 @@ rf = Roboflow(api_key="vxn2kEr9CvN9YtaYLSxI")
 project = rf.workspace("tomss-workspace-woalo").project("stomata-pore-detection-unified")
 dataset = project.version(1).download("yolov8")
 
-print(f"Dataset downloaded in: {dataset.location}")
+"""print(f"Dataset downloaded in: {dataset.location}")
 print("--[x]--{ Loading base architecture for YOLO26 }--[x]--")
 model = YOLO('yolo26n.pt')
 
@@ -29,7 +29,7 @@ results = model.train(
     project='Phytolearning_Tests',
     name='test_jerarquico',
     exist_ok=True
-)
+) """
 
 #Testing that the model can receive a new image and output a prediction.
 print("--[x]--{ Initiating Test Prediction }--[x]--")
@@ -78,9 +78,22 @@ if len(pore_boxes) > 0:
         point_coords=None,
         point_labels=None,
         boxes=transformed_boxes,
-        multimask_output=False,
+        multimask_output=True,
     )
-    pore_masks = masks
+    
+    for i in range(masks.shape[0]):                 #This is to select the smaller mask from the bunch due to problems where SAM chooses the entire stoma.
+        options = masks[i]
+        areas = [torch.sum(options[j]).item() for j in range(options.shape[0])]
+        valid_areas = [a for a in areas if a>10]    #Filter masks that are just noise. In this case, masks over 10 pixels, kinda arbitrary, but we'll see.
+
+        if valid_areas:
+            target_area = min(valid_areas)
+            pore_index = areas.index(target_area)
+        else:                                       #If all of them are smaller than 10px, we'll choose the bigger one.
+            pore_index = np.argmax(areas)
+
+        isolated_mask = options[pore_index].unsqueeze(0)
+        pore_masks.append(isolated_mask)
 
 print("\n--[x]--{ Phase 3: Morphometric Analysis and Visuals }--[x]--")
 THRESHOLD_CLOSED_PIXELS = 100    
@@ -88,9 +101,11 @@ THRESHOLD_CLOSED_PIXELS = 100
 open_stoma = 0
 closed_stoma = 0
 
-color_mask_open = np.array([0, 255, 0, 128])        #Color the masks over the open stoma so we can actually see them lol
-color_mask_closed = np.array([0, 0, 255, 128])      #Same, but for closed ones.
+color_mask_open = np.array([0, 255, 0, 128])            #Color the masks over the open stoma so we can actually see them lol
+color_mask_closed = np.array([0, 0, 255, 128])          #Same, but for closed ones.
 output_img = img_bgr.copy()
+
+processed_pores = set()                                 #Memory to track already used pores.
 
 for s_box in stoma_boxes:                               #Check stoma by stoma.
     sx1, sy1, sx2, sy2 = s_box
@@ -103,9 +118,10 @@ for s_box in stoma_boxes:                               #Check stoma by stoma.
         pore_center_x = (px1 + px2) / 2
         pore_center_y = (py1 + py2) / 2
         
-        if sx1 <= pore_center_x <= sx2 and sy1 <= pore_center_y <= sy2:
+        if sx1-10 <= pore_center_x <= sx2+10 and sy1-10 <= pore_center_y <= sy2+10:
             pore_found_inside = True
             assigned_pore_idx = p_idx
+            processed_pores.add(p_idx)                  #Save pore in memory.
             break                                       #Stoma's pore found.
             
     if pore_found_inside:                               #If pore found -> Color mask and measure.
@@ -132,10 +148,29 @@ for s_box in stoma_boxes:                               #Check stoma by stoma.
         cv2.putText(output_img, "0px (Cerrado)", (int(sx1), int(sy1)-5),
                     cv2.FONT_HERSHEY_SIMPLEX, 0.4, color_box, 1)
 
+for p_idx, p_box in enumerate(pore_boxes):              #Evaluate pores without any stoma detected.
+    if p_idx not in processed_pores:
+        px1, py1, px2, py2 = p_box
+        mask_numpy = pore_masks[p_idx][0].cpu().numpy()
+        pixel_area = np.sum(mask_numpy)
+
+        if pixel_area < THRESHOLD_CLOSED_PIXELS:
+            closed_stoma += 1
+            color_box = (0, 0, 255)
+            output_img[mask_numpy] = (output_img[mask_numpy]*0.5) + (color_mask_closed[:3]*0.5)
+        else:
+            open_stoma += 1
+            color_box = (255, 0, 0)
+            output_img[mask_numpy] = (output_img[mask_numpy]*0.5) + (color_mask_open[:3]*0.5)
+
+        cv2.rectangle(output_img, (int(px1), int(py1)), (int(px2), int(py2)), color_box, 2)
+        cv2.putText(output_img, f"{pixel_area}px", (int(px1), int(py1)-5),
+                    cv2.FONT_HERSHEY_SIMPLEX, 0.4, color_box, 1)
+
 cv2.imwrite("yolo_sam_result.jpg", output_img)
 print("Masks applied, areas calculated and saved to 'yolo_sam_result.jpg'.")
 
-total_stomas_analizados = len(stoma_boxes)
+total_stomas_analizados = len(stoma_boxes) + (len(pore_boxes) - len(processed_pores))
 
 if total_stomas_analizados > 0:
     closed_pct = (closed_stoma / total_stomas_analizados) * 100
