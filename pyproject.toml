@@ -1,0 +1,25 @@
+[build-system]
+requires = ["setuptools>=61.0"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "phytolearning"
+version = "1.0.0"
+description = "Phytolearning Package: Automatic detection of Stomatic Morphometry using YOLO26s y MobileSAM."
+readme = "README.md"
+requires-python = ">=3.9"
+dependencies = [
+    "opencv-python",
+    "numpy",
+    "ultralytics",
+    "mobile-sam @ git+https://github.com/ChaoningZhang/MobileSAM.git",
+    "timm"
+]
+
+[project.scripts]
+#This creates the command that the user can write in the terminal.
+phytolearning = "phytolearning.phytolearning_pipeline:main"
+
+[tool.setuptools.package-data]
+#Forces the installer to include my pretrained .pt models. 
+phytolearning = ["weights/*.pt"]
