@@ -13,6 +13,17 @@ Esta herramienta está diseñada para operar eficientemente en hardware estánda
 
 ## Instalación Local
 Por el momento, el paquete se instala clonando o descargando este directorio de forma local. Se recomienda el uso de un entorno virtual como `venv` o `conda`.
+Esto se puede realizar con el comando: 
+
+   ``python -m venv <Nombre_del_entorno>``
+
+Con el entorno creado, este se puede activar de distintas formas dependiendo del sistema operativo:
+
+Windows: ``<Nombre_del_entorno>\Scripts\activate``
+
+Mac/Linux: ``source <Nombre_del_entorno>/bin/activate`` 
+
+Una vez dentro del entorno, no deberían haber problemas de dependencias, por lo que es seguro instalar el paquete.
 
 1. Abre tu terminal y ve hasta la carpeta raíz del proyecto:
    cd <ruta_hacia>/phytolearning_pack
